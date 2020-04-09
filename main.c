@@ -58,8 +58,8 @@ void TimerA_UART_init(void);
 void TimerA_UART_tx(unsigned char byte);
 void TimerA_UART_print(char *string);
 
-unsigned char pulsadores = 0;
-
+unsigned char button_semaphore = 0;
+char *button_name = "N_B";
 
 void flash( int ms_cycle, int n_times );
 void wait_ms( int ms_cycle);
@@ -78,17 +78,37 @@ void main(void)
     BCSCTL1 = CALBC1_1MHZ;                      // Set DCO
     DCOCTL = CALDCO_1MHZ;
     P1SEL = UART_TXD + UART_RXD;                // Timer function for TXD/RXD pins
-    P1DIR |= BIT1 + BIT2;                       // Set P1.1 and P1.2  to output direction
-    P1IE |=  BIT3 + BIT4 + BIT5;                // P1.3 and P1.4 interrupt enabled
-    P1IES |= BIT3 + BIT4 + BIT5;                // P1.3 and P1.4 Hi/lo edge
-    P1REN |= BIT3 + BIT4 + BIT5;                // Enable Pull Up on P1.4 and P1.5
-    P1IFG &=  ~( BIT3 + BIT4 + BIT5);           // P1.3 IFG cleared
-                                                //BIT3 on Port 1 can be used as Switch2
-    P1OUT = BIT3 + BIT4 + BIT5;
+    P1DIR = BIT1;                               // Set all P1.x to input direction except TX
+    P1IE =  ~BIT1;                              // All P1.x interrupts enabled except TX
+    P1IES = ~BIT1;                              // P1.3 and P1.4 Hi/lo edge
+    P1REN = ~( BIT1 + BIT2 );                   // Enable Pull Up on P1.4 and P1.5
+    P1IFG =  0;                                 // P1.x IFG cleared
+                                                // BIT3 on Port 1 can be used as Switch2
+    P2DIR = 0xFF;      // Set all P1.x to input direction except TX`
+
+    __enable_interrupt();
+
+    TimerA_UART_init();                     // Start Timer_A UART
+    TimerA_UART_print("\r\n");
+    TimerA_UART_print("Bienvenido a la miniconsola QuizGame\r\n");
+    TimerA_UART_print("Este proyecto es una idea de David Sandin Martinq\r\n");
+    TimerA_UART_print("para el colegio Sagrado Corazon de Jesus que vio su luz\r\n");
+    TimerA_UART_print("en marzo del 2020.\r\n");
+    TimerA_UART_print("Ideado y realizado por antiguos alumnos del Amor de dios.\r\n");
+
+    P2OUT = BIT0 + BIT3;
 
     flash( 25, 25 );
+    for(;;)
+    {
+        if( button_semaphore )
+        {
+            TimerA_UART_print(button_name);
+            TimerA_UART_print("\r\n");
+            button_semaphore = 0;
+        }
+    }
 
-    __bis_SR_register(LPM0_bits + GIE);       // Enter LPM4 w/interrupt
 }
 
 // Port 1 interrupt service routine
@@ -101,19 +121,25 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
 #error Compiler not supported!
 #endif
 {
-
-    if( P1IFG & BIT4 )
+    button_semaphore = 1;
+    if( P1IFG & BIT0 )
+    {
+        P2OUT ^= BIT0;
+        button_name = "G_1";
+        __delay_cycles(400000);
+    }
+    else if ( P1IFG & BIT4 )
     {
         P2OUT ^= BIT1;
-        __delay_cycles(500000);
-                                 // P1.4 IFG cleared
-    }
-    else if ( P1IFG & BIT5 )
-    {
-        P2OUT ^= BIT2;
-        __delay_cycles(500000);
+        button_name = "W_1";
+        __delay_cycles(400000);
 
     }
+    else if ( P1IFG & BIT3 )
+    {
+        button_name = "Go...!";
+    }
+
     P1IFG = 0;
 
 }
@@ -132,18 +158,120 @@ void __attribute__ ((interrupt(USCIAB0RX_VECTOR))) USCI0RX_ISR (void)
   UCA0TXBUF = UCA0RXBUF;                    // TX -> RXed character
 }
 
+//------------------------------------------------------------------------------
+// Function configures Timer_A for full-duplex UART operation
+//------------------------------------------------------------------------------
+void TimerA_UART_init(void)
+{
+    TACCTL0 = OUT;                          // Set TXD Idle as Mark = '1'
+    TACCTL1 = SCS + CM1 + CAP + CCIE;       // Sync, Neg Edge, Capture, Int
+    TACTL = TASSEL_2 + MC_2;                // SMCLK, start in continuous mode
+}
+//------------------------------------------------------------------------------
+// Outputs one byte using the Timer_A UART
+//------------------------------------------------------------------------------
+void TimerA_UART_tx(unsigned char byte)
+{
+    while (TACCTL0 & CCIE);                 // Ensure last char got TX'd
+    TACCR0 = TAR;                           // Current state of TA counter
+    TACCR0 += UART_TBIT;                    // One bit time till first bit
+    TACCTL0 = OUTMOD0 + CCIE;               // Set TXD on EQU0, Int
+    txData = byte;                          // Load global variable
+    txData |= 0x100;                        // Add mark stop bit to TXData
+    txData <<= 1;                           // Add space start bit
+}
+
+//------------------------------------------------------------------------------
+// Prints a string over using the Timer_A UART
+//------------------------------------------------------------------------------
+void TimerA_UART_print(char *string)
+{
+    while (*string) {
+        TimerA_UART_tx(*string++);
+    }
+}
+//------------------------------------------------------------------------------
+// Timer_A UART - Transmit Interrupt Handler
+//------------------------------------------------------------------------------
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector = TIMER0_A0_VECTOR
+__interrupt void Timer_A0_ISR(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(TIMER0_A0_VECTOR))) Timer_A0_ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+    static unsigned char txBitCnt = 10;
+
+    TACCR0 += UART_TBIT;                    // Add Offset to CCRx
+    if (txBitCnt == 0) {                    // All bits TXed?
+        TACCTL0 &= ~CCIE;                   // All bits TXed, disable interrupt
+        txBitCnt = 10;                      // Re-load bit counter
+    }
+    else {
+        if (txData & 0x01) {
+          TACCTL0 &= ~OUTMOD2;              // TX Mark '1'
+        }
+        else {
+          TACCTL0 |= OUTMOD2;               // TX Space '0'
+        }
+        txData >>= 1;
+        txBitCnt--;
+    }
+}
+//------------------------------------------------------------------------------
+// Timer_A UART - Receive Interrupt Handler
+//------------------------------------------------------------------------------
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector = TIMER0_A1_VECTOR
+__interrupt void Timer_A1_ISR(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(TIMER0_A1_VECTOR))) Timer_A1_ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+    static unsigned char rxBitCnt = 8;
+    static unsigned char rxData = 0;
+
+    switch (__even_in_range(TA0IV, TA0IV_TAIFG)) { // Use calculated branching
+        case TA0IV_TACCR1:                        // TACCR1 CCIFG - UART RX
+            TACCR1 += UART_TBIT;                 // Add Offset to CCRx
+            if (TACCTL1 & CAP) {                 // Capture mode = start bit edge
+                TACCTL1 &= ~CAP;                 // Switch capture to compare mode
+                TACCR1 += UART_TBIT_DIV_2;       // Point CCRx to middle of D0
+            }
+            else {
+                rxData >>= 1;
+                if (TACCTL1 & SCCI) {            // Get bit waiting in receive latch
+                    rxData |= 0x80;
+                }
+                rxBitCnt--;
+                if (rxBitCnt == 0) {             // All bits RXed?
+                    rxBuffer = rxData;           // Store in global variable
+                    rxBitCnt = 8;                // Re-load bit counter
+                    TACCTL1 |= CAP;              // Switch compare to capture mode
+                    //__bic_SR_register_on_exit(LPM0_bits);  // Clear LPM0 bits from 0(SR)
+                }
+            }
+            break;
+    }
+}
+//------------------------------------------------------------------------------
+
 void flash( int ms_cycle, int n_times )
 {
     int l_var0 = 0;
     for( l_var0 = 0; l_var0 < n_times; l_var0++ )
     {
-        P2OUT ^= BIT1 + BIT2;
+        P2OUT ^= BIT0 + BIT1;
         wait_ms(ms_cycle);
-        P2OUT ^= BIT1 + BIT2;
+        P2OUT ^= BIT0 + BIT1;
         wait_ms(ms_cycle);
     }
 
-    P2OUT &= ~( BIT1 + BIT2);
+    P2OUT &= ~( BIT0 + BIT1);
 }
 
 void wait_ms(int ms_cycle)
