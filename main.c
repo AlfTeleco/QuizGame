@@ -33,6 +33,7 @@
 
 
 #include <msp430.h>
+
 //------------------------------------------------------------------------------
 // Hardware-related definitions
 //------------------------------------------------------------------------------
@@ -60,10 +61,11 @@ void TimerA_UART_print(char *string);
 
 unsigned char button_semaphore = 0;
 char *button_name = "N_B";
+unsigned int  timer_counts = 0;
 
 void flash( int ms_cycle, int n_times );
 void wait_ms( int ms_cycle);
-
+void integer_to_string( char *str, unsigned int number );
 /**
  * blink.c
  */
@@ -84,14 +86,18 @@ void main(void)
     P1REN = ~( BIT1 + BIT2 );                   // Enable Pull Up on P1.4 and P1.5
     P1IFG =  0;                                 // P1.x IFG cleared
                                                 // BIT3 on Port 1 can be used as Switch2
-    P2DIR = 0xFF;      // Set all P1.x to input direction except TX`
+    P2DIR = 0xFF;                                // Set all P1.x to input direction except TX`
+
+    // Configure TA1 to count
+    TA1CTL = TASSEL_2 + ID_3 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
+
 
     __enable_interrupt();
 
     TimerA_UART_init();                     // Start Timer_A UART
     TimerA_UART_print("\r\n");
     TimerA_UART_print("Bienvenido a la miniconsola QuizGame\r\n");
-    TimerA_UART_print("Este proyecto es una idea de David Sandin Martinq\r\n");
+    TimerA_UART_print("Este proyecto es una idea de David Sandin Martin\r\n");
     TimerA_UART_print("para el colegio Sagrado Corazon de Jesus que vio su luz\r\n");
     TimerA_UART_print("en marzo del 2020.\r\n");
     TimerA_UART_print("Ideado y realizado por antiguos alumnos del Amor de dios.\r\n");
@@ -99,12 +105,20 @@ void main(void)
     P2OUT = BIT0 + BIT3;
 
     flash( 25, 25 );
+
+    char time[8];
     for(;;)
     {
         if( button_semaphore )
         {
             TimerA_UART_print(button_name);
-            TimerA_UART_print("\r\n");
+            TimerA_UART_print("\r\nPushed in: ");
+            timer_counts /= 10;
+            timer_counts *= 8;
+            timer_counts /= 100;
+            integer_to_string( time, timer_counts );
+            TimerA_UART_print(time);
+            TimerA_UART_print("ms\r\n");
             button_semaphore = 0;
         }
     }
@@ -122,6 +136,8 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
 #endif
 {
     button_semaphore = 1;
+    TA1CTL &= MC_0;        // Stops the timer
+    timer_counts = TA1R;
     if( P1IFG & BIT0 )
     {
         P2OUT ^= BIT0;
@@ -138,6 +154,7 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
     else if ( P1IFG & BIT3 )
     {
         button_name = "Go...!";
+        TA1CTL = TASSEL_2 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
     }
 
     P1IFG = 0;
@@ -281,4 +298,29 @@ void wait_ms(int ms_cycle)
     {
         __delay_cycles(1000);
     }
+}
+
+void integer_to_string( char *str, unsigned int number )
+{
+    // number of figures?
+    int number_of_figures = 0;
+    unsigned int t_number = number;
+    while( t_number % 10 )
+    {
+        t_number /= 10;
+        number_of_figures++;
+    }
+
+    t_number = number;
+
+    int l_var0 = 0;
+    char *p = str;
+    for( l_var0 = 0; l_var0 < number_of_figures; l_var0++ )
+    {
+        *p = t_number%10 + 48;
+        p++;
+        t_number /= 10;
+    }
+
+
 }
