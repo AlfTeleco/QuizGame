@@ -71,7 +71,7 @@ void TimerA_UART_print(char *string);
 unsigned char button_semaphore = 0;
 char *button_name = "N_B";
 unsigned int button = 0;
-unsigned int  timer_counts = 0;
+unsigned long  timer_counts = 0;
 
 void flash( int ms_cycle, int n_times );
 void wait_ms( int ms_cycle);
@@ -99,7 +99,7 @@ void main(void)
     P2DIR = 0xFF;                                // Set all P1.x to input direction except TX`
 
     // Configure TA1 to count
-    TA1CTL = TASSEL_1 + ID_2 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
+    TA1CTL = TASSEL_1 + ID_3 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
 
 
     __enable_interrupt();
@@ -123,52 +123,49 @@ void main(void)
         {
             switch (button) {
                 case Start:
-                    button_name = "Go...!";
+                    button_name = "Go...!\r\n";
                     TimerA_UART_print(button_name);
                     break;
                 case Red:
-                    button_name = "R_1";
-                    TimerA_UART_print(button_name);
-                    TimerA_UART_print("\r\nPushed in: ");
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
+                    button_name = "R ";
+                    TimerA_UART_print(button_name);
                     TimerA_UART_print(time);
                     TimerA_UART_print("ms\r\n");
                     break;
                 case White:
-                    button_name = "W_1";
-                    TimerA_UART_print(button_name);
-                    TimerA_UART_print("\r\nPushed in: ");
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
+                    button_name = "W ";
+                    TimerA_UART_print(button_name);
                     TimerA_UART_print(time);
                     TimerA_UART_print("ms\r\n");
                     break;
                 case Green:
-                    button_name = "G_1";
-                    TimerA_UART_print(button_name);
-                    TimerA_UART_print("\r\nPushed in: ");
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
+                    button_name = "G ";
+                    TimerA_UART_print(button_name);
                     TimerA_UART_print(time);
                     TimerA_UART_print("ms\r\n");
                     break;
                 case Blue:
-                    button_name = "B_1";
-                    TimerA_UART_print(button_name);
-                    TimerA_UART_print("\r\nPushed in: ");
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
+                    button_name = "B ";
+                    TimerA_UART_print(button_name);
                     TimerA_UART_print(time);
                     TimerA_UART_print("ms\r\n");
                     break;
                 default:
                     break;
             }
+            timer_counts = 0;
             button_semaphore = 0;
         }
     }
@@ -205,7 +202,7 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
     {
         button = Start;
         P2OUT = 0;
-        TA1CTL = TASSEL_1 + ID_2 + MC_2 + TACLR;        // Clear and starts the timer
+        TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
     }
 
     P1IFG = 0;
@@ -354,31 +351,27 @@ void wait_ms(int ms_cycle)
 void integer_to_string( char *str, unsigned int number )
 {
     // number of figures?
-    int number_of_figures = 0;
+    int number_of_figures = 1;
     unsigned int t_number = number;
 
-    while( t_number % 10 )
+    while( (t_number /= 10) > 0 )
     {
-        t_number /= 10;
         number_of_figures++;
-    }
-
-    if( !number )
-    {
-        number_of_figures = 1;
     }
 
     t_number = number;
 
     int l_var0 = 0;
     char *p = str;
+    p = p + number_of_figures - 1;
 
-    for( l_var0 = 0; l_var0 < number_of_figures; l_var0++ )
+    for( l_var0 = number_of_figures; l_var0 > 0; l_var0-- )
     {
         *p = t_number%10 + 48;
-        p++;
+        p--;
         t_number /= 10;
     }
+    p = str + number_of_figures;
     *p = '\0';
 
 }
