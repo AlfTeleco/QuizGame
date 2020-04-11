@@ -46,6 +46,15 @@
 #define UART_TBIT_DIV_2     (1000000 / (9600 * 2))
 #define UART_TBIT           (1000000 / 9600)
 
+
+enum Button {
+    Start = 0,
+    Red,
+    Green,
+    White,
+    Blue
+    };
+
 //------------------------------------------------------------------------------
 // Global variables used for full-duplex UART communication
 //------------------------------------------------------------------------------
@@ -61,6 +70,7 @@ void TimerA_UART_print(char *string);
 
 unsigned char button_semaphore = 0;
 char *button_name = "N_B";
+unsigned int button = 0;
 unsigned int  timer_counts = 0;
 
 void flash( int ms_cycle, int n_times );
@@ -89,7 +99,7 @@ void main(void)
     P2DIR = 0xFF;                                // Set all P1.x to input direction except TX`
 
     // Configure TA1 to count
-    TA1CTL = TASSEL_2 + ID_3 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
+    TA1CTL = TASSEL_1 + ID_2 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
 
 
     __enable_interrupt();
@@ -106,19 +116,59 @@ void main(void)
 
     flash( 25, 25 );
 
-    char time[8];
+    char time[] = "0";
     for(;;)
     {
         if( button_semaphore )
         {
-            TimerA_UART_print(button_name);
-            TimerA_UART_print("\r\nPushed in: ");
-            timer_counts /= 10;
-            timer_counts *= 8;
-            timer_counts /= 100;
-            integer_to_string( time, timer_counts );
-            TimerA_UART_print(time);
-            TimerA_UART_print("ms\r\n");
+            switch (button) {
+                case Start:
+                    button_name = "Go...!";
+                    TimerA_UART_print(button_name);
+                    break;
+                case Red:
+                    button_name = "R_1";
+                    TimerA_UART_print(button_name);
+                    TimerA_UART_print("\r\nPushed in: ");
+                    timer_counts *= 244;
+                    timer_counts /=1000;
+                    integer_to_string( time, timer_counts );
+                    TimerA_UART_print(time);
+                    TimerA_UART_print("ms\r\n");
+                    break;
+                case White:
+                    button_name = "W_1";
+                    TimerA_UART_print(button_name);
+                    TimerA_UART_print("\r\nPushed in: ");
+                    timer_counts *= 244;
+                    timer_counts /=1000;
+                    integer_to_string( time, timer_counts );
+                    TimerA_UART_print(time);
+                    TimerA_UART_print("ms\r\n");
+                    break;
+                case Green:
+                    button_name = "G_1";
+                    TimerA_UART_print(button_name);
+                    TimerA_UART_print("\r\nPushed in: ");
+                    timer_counts *= 244;
+                    timer_counts /=1000;
+                    integer_to_string( time, timer_counts );
+                    TimerA_UART_print(time);
+                    TimerA_UART_print("ms\r\n");
+                    break;
+                case Blue:
+                    button_name = "B_1";
+                    TimerA_UART_print(button_name);
+                    TimerA_UART_print("\r\nPushed in: ");
+                    timer_counts *= 244;
+                    timer_counts /=1000;
+                    integer_to_string( time, timer_counts );
+                    TimerA_UART_print(time);
+                    TimerA_UART_print("ms\r\n");
+                    break;
+                default:
+                    break;
+            }
             button_semaphore = 0;
         }
     }
@@ -141,20 +191,21 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
     if( P1IFG & BIT0 )
     {
         P2OUT ^= BIT0;
-        button_name = "G_1";
+        button = White;
         __delay_cycles(400000);
     }
     else if ( P1IFG & BIT4 )
     {
         P2OUT ^= BIT1;
-        button_name = "W_1";
+        button = Red;
         __delay_cycles(400000);
 
     }
     else if ( P1IFG & BIT3 )
     {
-        button_name = "Go...!";
-        TA1CTL = TASSEL_2 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
+        button = Start;
+        P2OUT = 0;
+        TA1CTL = TASSEL_1 + ID_2 + MC_2 + TACLR;        // Clear and starts the timer
     }
 
     P1IFG = 0;
@@ -305,22 +356,29 @@ void integer_to_string( char *str, unsigned int number )
     // number of figures?
     int number_of_figures = 0;
     unsigned int t_number = number;
+
     while( t_number % 10 )
     {
         t_number /= 10;
         number_of_figures++;
     }
 
+    if( !number )
+    {
+        number_of_figures = 1;
+    }
+
     t_number = number;
 
     int l_var0 = 0;
     char *p = str;
+
     for( l_var0 = 0; l_var0 < number_of_figures; l_var0++ )
     {
         *p = t_number%10 + 48;
         p++;
         t_number /= 10;
     }
-
+    *p = '\0';
 
 }
