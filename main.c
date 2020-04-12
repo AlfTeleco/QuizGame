@@ -96,7 +96,7 @@ void main(void)
     P1REN = ~( BIT1 + BIT2 );                   // Enable Pull Up on P1.4 and P1.5
     P1IFG =  0;                                 // P1.x IFG cleared
                                                 // BIT3 on Port 1 can be used as Switch2
-    P2DIR = 0xFF;                                // Set all P1.x to input direction except TX`
+    P2DIR = 0xFF;                               // Set all P1.x to ouput direction
 
     // Configure TA1 to count
     TA1CTL = TASSEL_1 + ID_3 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
@@ -112,7 +112,7 @@ void main(void)
     TimerA_UART_print("en marzo del 2020.\r\n");
     TimerA_UART_print("Ideado y realizado por antiguos alumnos del Amor de dios.\r\n");
 
-    P2OUT = BIT0 + BIT3;
+    P2OUT = BIT0 + BIT1 + BIT2;
 
     flash( 25, 25 );
 
@@ -165,8 +165,10 @@ void main(void)
                 default:
                     break;
             }
+            wait_ms(50);
             timer_counts = 0;
             button_semaphore = 0;
+            P1IFG =  0;                                 // P1.x IFG cleared
         }
     }
 
@@ -182,31 +184,34 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
 #error Compiler not supported!
 #endif
 {
+
+    if( !button_semaphore )
+    {
+        TA1CTL &= MC_0;        // Stops the timer
+        timer_counts = TA1R;
+        if( P1IFG & BIT0 )
+        {
+            button = Start;
+            P1IE =  ~BIT1;                              // All P1.x interrupts enabled except TX
+            P2OUT  = BIT2;
+            TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
+        }
+        else if ( P1IFG & BIT4 )
+        {
+            P2OUT = BIT1;
+            button = Blue;
+            P1IE = BIT0 + BIT2;
+        }
+        else if ( P1IFG & BIT5 )
+        {
+            P2OUT = BIT0;
+            button = Red;
+            P1IE = BIT0 + BIT2;
+        }
+    }
+
     button_semaphore = 1;
-    TA1CTL &= MC_0;        // Stops the timer
-    timer_counts = TA1R;
-    if( P1IFG & BIT0 )
-    {
-        P2OUT ^= BIT0;
-        button = White;
-        __delay_cycles(400000);
-    }
-    else if ( P1IFG & BIT4 )
-    {
-        P2OUT ^= BIT1;
-        button = Red;
-        __delay_cycles(400000);
-
-    }
-    else if ( P1IFG & BIT3 )
-    {
-        button = Start;
-        P2OUT = 0;
-        TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
-    }
-
     P1IFG = 0;
-
 }
 
 // Echo back RXed character, confirm TX buffer is ready first
@@ -330,13 +335,13 @@ void flash( int ms_cycle, int n_times )
     int l_var0 = 0;
     for( l_var0 = 0; l_var0 < n_times; l_var0++ )
     {
-        P2OUT ^= BIT0 + BIT1;
+        P2OUT ^= BIT0 + BIT1 + BIT2;
         wait_ms(ms_cycle);
-        P2OUT ^= BIT0 + BIT1;
+        P2OUT ^= BIT0 + BIT1 + BIT2;
         wait_ms(ms_cycle);
     }
 
-    P2OUT &= ~( BIT0 + BIT1);
+    P2OUT &= ~( BIT0 + BIT1 + BIT2);
 }
 
 void wait_ms(int ms_cycle)
