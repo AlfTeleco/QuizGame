@@ -33,6 +33,7 @@
 
 
 #include <msp430.h>
+#include <stdlib.h>
 
 //------------------------------------------------------------------------------
 // Hardware-related definitions
@@ -99,7 +100,7 @@ void main(void)
     P2DIR = 0xFF;                               // Set all P1.x to ouput direction
 
     // Configure TA1 to count
-    TA1CTL = TASSEL_1 + ID_3 + MC_0 + TACLR;        // ACLK, upmode, clear TAR
+    TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // ACLK, upmode, clear TAR
 
 
     __enable_interrupt();
@@ -123,44 +124,56 @@ void main(void)
         {
             switch (button) {
                 case Start:
-                    button_name = "Go...!\r\n";
+                    button_name = "Go...!_\r";
                     TimerA_UART_print(button_name);
+                    int t_time = 0;
+                    srand( timer_counts % 10 );
+                    while( t_time > 2000 || t_time < 500 )
+                    {
+                        t_time = rand();
+                    }
+                    //integer_to_string( time, t_time );
+                   // TimerA_UART_print(time);
+                    wait_ms( t_time );
+                    P2OUT = 0;
+                    TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
                     break;
                 case Red:
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
-                    button_name = "R ";
-                    TimerA_UART_print(button_name);
+                    button_name = "_R*";
                     TimerA_UART_print(time);
-                    TimerA_UART_print("ms\r\n");
+                    TimerA_UART_print("_ms");
+                    TimerA_UART_print(button_name);
                     break;
                 case White:
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
-                    button_name = "W ";
-                    TimerA_UART_print(button_name);
+                    button_name = "_W*";
                     TimerA_UART_print(time);
-                    TimerA_UART_print("ms\r\n");
+                    TimerA_UART_print("_ms");
+                    TimerA_UART_print(button_name);
                     break;
                 case Green:
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
-                    button_name = "G ";
-                    TimerA_UART_print(button_name);
+                    button_name = "_G*";
                     TimerA_UART_print(time);
-                    TimerA_UART_print("ms\r\n");
+                    TimerA_UART_print("_ms");
+                    TimerA_UART_print(button_name);
+
                     break;
                 case Blue:
                     timer_counts *= 244;
                     timer_counts /=1000;
                     integer_to_string( time, timer_counts );
-                    button_name = "B ";
-                    TimerA_UART_print(button_name);
+                    button_name = "_B*";
                     TimerA_UART_print(time);
-                    TimerA_UART_print("ms\r\n");
+                    TimerA_UART_print("_ms");
+                    TimerA_UART_print(button_name);
                     break;
                 default:
                     break;
@@ -194,7 +207,6 @@ void __attribute__ ((interrupt(PORT1_VECTOR))) Port_1 (void)
             button = Start;
             P1IE =  ~BIT1;                              // All P1.x interrupts enabled except TX
             P2OUT  = BIT2;
-            TA1CTL = TASSEL_1 + ID_3 + MC_2 + TACLR;        // Clear and starts the timer
         }
         else if ( P1IFG & BIT4 )
         {
